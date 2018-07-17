@@ -1,0 +1,34 @@
+version: 2.0
+jobs:
+  sync:
+    working_directory: ~/Orfox-setup
+    docker:
+      - image: unpublished/build-orfox:latest
+    environment:
+      SHELL: "/bin/bash"
+      SDK_BASE: "/opt/android-sdk-linux"
+      MOZCONFIG: "/root/Orfox-setup/external/tor-browser/.mozconfig-orfox-release"
+      versionCode: "15"
+      versionName: "Fennec-52.9.0esr/TorBrowser-7.5-2/Orfox-1.5.4-RC-1"
+    steps:
+      - checkout
+      - run: |
+          cp -f .mozconfig-orfox-release /$MOZCONFIG
+          cat external/tor-browser/.mozconfig-orfox >> $MOZCONFIG
+      - run:
+          command: |
+            source ~/.profile
+            source ~/.bashrc
+            unset JAVA_VERSION
+            ./mach configure
+            ./mach build
+            sed -i "s,versionName=\"[^\"]*\",versionName=\"$versionName\"," obj-tbb-arm-linux-androideabi/mobile/android/base/AndroidManifest.xml
+            sed -i "s,versionCode=\"[^\"]*\",versionCode=\"$versionCode\"," obj-tbb-arm-linux-androideabi/mobile/android/base/AndroidManifest.xml
+            ./mach package
+          working_directory: "~/Orfox-setup/external/tor-browser"
+
+workflows:
+  version: 2
+  sync_n_build:
+    jobs:
+      - sync
