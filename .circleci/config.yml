@@ -1,34 +1,127 @@
 version: 2.0
-jobs:
-  sync:
-    working_directory: ~/Orfox-setup
-    docker:
-      - image: unpublished/build-orfox:latest
-    environment:
-      SHELL: "/bin/bash"
-      SDK_BASE: "/opt/android-sdk-linux"
-      MOZCONFIG: "/root/Orfox-setup/external/tor-browser/.mozconfig-orfox-release"
-      versionCode: "15"
-      versionName: "Fennec-52.9.0esr/TorBrowser-7.5-2/Orfox-1.5.4-RC-1"
-    steps:
-      - checkout
-      - run: |
-          cp -f .mozconfig-orfox-release /$MOZCONFIG
+default: &default
+  working_directory: ~/Orfox-setup
+  environment:
+    SHELL: "/bin/bash"
+    MOZCONFIG: "/root/Orfox-setup/external/tor-browser/.mozconfig-orfox-release"
+    versionCode: "15"
+    versionName: "Fennec-52.9.0esr/TorBrowser-7.5-2/Orfox-1.5.4-RC-1"
+    CCACHE_COMPILERCHECK: "content"
+    CCACHE_SLOPPINESS: "include_file_ctime,include_file_mtime"
+  steps:
+    - checkout
+    - run:
+        name: Update submodules
+        command: |
+          git submodule sync --recursive
+          git submodule update --recursive
+    - run:
+        name: Prepare .mozconfig
+        command: |
+          cp -f .mozconfig-orfox-release $MOZCONFIG
           cat external/tor-browser/.mozconfig-orfox >> $MOZCONFIG
-      - run:
-          command: |
-            source ~/.profile
-            source ~/.bashrc
-            unset JAVA_VERSION
-            ./mach configure
-            ./mach build
-            sed -i "s,versionName=\"[^\"]*\",versionName=\"$versionName\"," obj-tbb-arm-linux-androideabi/mobile/android/base/AndroidManifest.xml
-            sed -i "s,versionCode=\"[^\"]*\",versionCode=\"$versionCode\"," obj-tbb-arm-linux-androideabi/mobile/android/base/AndroidManifest.xml
-            ./mach package
-          working_directory: "~/Orfox-setup/external/tor-browser"
+          cd external/tor-browser
+          export HEAD_REV=$(git rev-parse HEAD)
+          echo "$NDK_VERSION_REV-$CCACHE_COMPILERCHECK-CCACHE_SLOPPINESS-$HEAD_REV" > /tmp/buildconf_revision
+          echo "$NDK_VERSION_REV-$CCACHE_COMPILERCHECK-CCACHE_SLOPPINESS" > /tmp/buildconf
+    - restore_cache:
+        keys:
+         - ccache-{{ checksum "/tmp/buildconf_revision" }}
+         - ccache-{{ checksum "/tmp/buildconf" }}
+    - run:
+        name: Setup ccache
+        command: |
+          ccache -M 5G
+          ccache -s
+    - run:
+        name: Configure and Build
+        command: |
+          source ~/.profile
+          source ~/.bashrc
+          unset JAVA_VERSION
+          ./mach configure
+          ./mach build
+          ccache -s
+          sed -i "s,versionName=\"[^\"]*\",versionName=\"$versionName\"," obj-tbb-arm-linux-androideabi/mobile/android/base/AndroidManifest.xml
+          sed -i "s,versionCode=\"[^\"]*\",versionCode=\"$versionCode\"," obj-tbb-arm-linux-androideabi/mobile/android/base/AndroidManifest.xml
+          ./mach package
+          mkdir -p /tmp/artifacts
+          mv obj-tbb-arm-linux-androideabi/dist/fennec-*.android-arm.apk /tmp/artifacts
+        working_directory: "~/Orfox-setup/external/tor-browser"
+    - save_cache:
+        key: ccache-{{ checksum "/tmp/buildconf_revision" }}
+        paths:
+          - ~/.ccache
+    - store_artifacts:
+        path: /tmp/artifacts
+
+
+jobs:
+  ndk_r10e:
+    <<: *default
+    docker:
+      - image: unpublished/build-orfox:ndk-r10e
+        environment:
+          NDK_VERSION_REV: 10e
+  ndk_r11c:
+    <<: *default
+    docker:
+      - image: unpublished/build-orfox:ndk-r11c
+        environment:
+          NDK_VERSION_REV: 11c
+  ndk_r12b:
+    <<: *default
+    docker:
+      - image: unpublished/build-orfox:ndk-r12b
+        environment:
+          NDK_VERSION_REV: 12b
+  ndk_r13b:
+    <<: *default
+    docker:
+      - image: unpublished/build-orfox:ndk-r13b
+        environment:
+          NDK_VERSION_REV: 13b
+  ndk_r14b:
+    <<: *default
+    docker:
+      - image: unpublished/build-orfox:ndk-r14b
+        environment:
+          NDK_VERSION_REV: 14b
+  ndk_r15c:
+    <<: *default
+    docker:
+      - image: unpublished/build-orfox:ndk-r15c
+        environment:
+          NDK_VERSION_REV: 15c
+  ndk_r16b:
+    <<: *default
+    docker:
+      - image: unpublished/build-orfox:ndk-r16b
+        environment:
+          NDK_VERSION_REV: 16b
+  ndk_r17b:
+    <<: *default
+    docker:
+      - image: unpublished/build-orfox:ndk-r17b
+        environment:
+          NDK_VERSION_REV: 17b
+  ndk_r18:
+    <<: *default
+    docker:
+      - image: unpublished/build-orfox:ndk-r18
+        environment:
+          NDK_VERSION_REV: 18-beta1
 
 workflows:
   version: 2
-  sync_n_build:
+  orfox:
     jobs:
-      - sync
+      - ndk_r10e
+      - ndk_r11c
+      - ndk_r12b
+      #- ndk_r13b
+      #- ndk_r14b
+      #- ndk_r15c
+      #- ndk_r16b
+      #- ndk_r17b
+      #- ndk_r18
